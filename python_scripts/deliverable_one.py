@@ -11,6 +11,7 @@ from typing import Any, Generator
 
 HEADER = ['NUM_FEATURES', 'CONCAT_FEATURES', 'IRREDUCIBLE_ERROR']
 
+
 ########## NORMALIZATION ##########
 
 def _median_norm(col: pd.DataFrame) -> pd.DataFrame:
@@ -31,8 +32,6 @@ def _combinations_gen(features: pd.DataFrame, size_of: int) -> Generator:
     # groups of the column names
     for i, comb_colnames in enumerate(combinations(features.columns.tolist(), size_of)):
         # print(i)
-        if random.random() < 0.8:
-            continue
         # actually get the group of columns
         comb = features[list(comb_colnames)]
         yield comb
@@ -45,7 +44,6 @@ def _compute_irreducible__mutates(features: pd.DataFrame, outcomes: pd.DataFrame
     variances_by_group = agg_by_group[('outcome', 'var')].fillna(0)
     counts_by_group = agg_by_group[('outcome', 'count')]
     return ((variances_by_group * counts_by_group) / num_rows).sum()
-
 
 
 ########## VARIANCE ENTRYPOINTS ##########
