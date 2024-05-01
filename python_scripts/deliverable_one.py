@@ -4,52 +4,45 @@ from collections import defaultdict
 import csv
 from itertools import combinations
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
 from typing import Any, Generator
 
 ########## GLOBALS ##########
-HEADER = ('NUM_FEATURES', 'CONCAT_FEATURES', 'IRREDUCIBLE_ERROR')
+
+HEADER = ['NUM_FEATURES', 'CONCAT_FEATURES', 'IRREDUCIBLE_ERROR']
 
 ########## NORMALIZATION ##########
 
-def _median_norm__inplace(col: pd.DataFrame) -> pd.DataFrame:
+def _median_norm(col: pd.DataFrame) -> pd.DataFrame:
     median = col.median()
-    col[:] = (col >= median).astype(int)
-    return col
+    return (col >= median).astype(int)
 
 def normalize__inplace(mtx: pd.DataFrame) -> pd.DataFrame:
     # only do median normalization for numeric values
     numeric_cols = mtx.select_dtypes(include="number")
 
-    for col_name, col in numeric_cols.iteritems():
-        mtx[col_name] = _median_norm__inplace(col)
+    for col_name, col in numeric_cols.items():
+        mtx[col_name] = _median_norm(col)
        
 
 ########## VARIANCE HELPERS ##########
 
 def _combinations_gen(features: pd.DataFrame, size_of: int) -> Generator:
-    for comb in combinations(features, size_of):
-        yield pd.DataFrame(comb)
+    # groups of the column names
+    for i, comb_colnames in enumerate(combinations(features.columns.tolist(), size_of)):
+        # print(i)
+        # actually get the group of columns
+        comb = features[list(comb_colnames)]
+        yield comb
 
-def _compute_values_for_mutually_exclusive_groups(features: pd.DataFrame, outcomes: pd.DataFrame) -> list[pd.DataFrame]:
-    rows_to_vals = defaultdict(list)
-    for i, row_tup in enumerate(features.itertuples(index=False, name=None)):
-        outcome = outcomes[i]
-        rows_to_vals[row_tup].append(outcome)
-    return [
-        pd.DataFrame(vals)
-        for vals in rows_to_vals.values()
-    ]
+def _compute_irreducible__mutates(features: pd.DataFrame, outcomes: pd.DataFrame) -> list[pd.DataFrame]:
+    group_by_colnames = features.columns.tolist()
+    num_rows = features.shape[0]
+    features.insert(len(group_by_colnames), "outcome", outcomes)
+    agg_by_group = features.groupby(group_by_colnames).agg(['count', 'var'])
+    variances_by_group = agg_by_group[('outcome', 'var')].fillna(0)
+    counts_by_group = agg_by_group[('outcome', 'count')]
+    return ((variances_by_group * counts_by_group) / num_rows).sum()
 
-def _compute_exp_cond_variance(grouped_outcomes: list[pd.DataFrame]) -> float:
-    exp_cond_variance = 0
-    total_vals = 0
-    for outcome_group in grouped_outcomes:
-        num_vals = len(outcome_group)
-        variance = outcome_group.var()
-        total_vals += num_vals
-        exp_cond_variance += variance*num_vals
-    return exp_cond_variance / total_vals
 
 
 ########## VARIANCE ENTRYPOINTS ##########
@@ -60,15 +53,26 @@ def compute_variances_for_groups_of_size(
         size_of: int,
         csv_writer,
     ) -> pd.DataFrame:
+    colnames = features.columns.tolist()
+    colname_to_int = {
+        colname: i
+        for i, colname in enumerate(colnames)
+    }
+    num_cols = len(colnames)
+    
     for comb in _combinations_gen(features, size_of):
+        # set which columns are included to be written to csv
+        included = [0]*num_cols
+        for colname in comb.columns.tolist():
+            idx = colname_to_int[colname]
+            included[idx] = 1
+
         csv_writer.writerow(
-            (
+            [
                 size_of,
-                ', '.join(comb.columns.values),
-                _compute_exp_cond_variance(
-                    _compute_values_for_mutually_exclusive_groups(comb, outcomes)
-                )
-            )   
+                ', '.join(comb.columns.tolist()),
+                _compute_irreducible__mutates(comb, outcomes)
+            ] + included   
         )
 
 
@@ -90,7 +94,8 @@ def irreducible_error_entrypoint(
 
     with open(results_filepath, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
-        csv_writer.writerow(HEADER)
+        header = HEADER + features.columns.tolist()
+        csv_writer.writerow(header)
 
         for size_of in group_sizes:
             compute_variances_for_groups_of_size(features, outcomes, size_of, csv_writer)
@@ -118,7 +123,7 @@ def main() -> None:
     )
     
     args = sim_cli.parse_args()
-    assert(args.size_of_groups), "Must have some sizes to run on!"
+    assert(args.sizes_of_groups), "Must have some sizes to run on!"
 
     return irreducible_error_entrypoint(
         args.data_filepath,
@@ -127,8 +132,6 @@ def main() -> None:
         args.sizes_of_groups,
     )
     
-
-
 
 if __name__ == "__main__":
     main()
