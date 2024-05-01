@@ -4,6 +4,7 @@ from collections import defaultdict
 import csv
 from itertools import combinations
 import pandas as pd
+import random
 from typing import Any, Generator
 
 ########## GLOBALS ##########
@@ -30,6 +31,8 @@ def _combinations_gen(features: pd.DataFrame, size_of: int) -> Generator:
     # groups of the column names
     for i, comb_colnames in enumerate(combinations(features.columns.tolist(), size_of)):
         # print(i)
+        if random.random() < 0.8:
+            continue
         # actually get the group of columns
         comb = features[list(comb_colnames)]
         yield comb
@@ -82,7 +85,7 @@ def irreducible_error_entrypoint(
     data_filepath: str,
     results_filepath: str,
     outcome_colname: str,
-    group_sizes: list[int]
+    numbers_of_features: list[int]
 ) -> None:
     # need to consider if this needs more cleaning
     data = pd.read_csv(data_filepath, header=0)
@@ -97,7 +100,7 @@ def irreducible_error_entrypoint(
         header = HEADER + features.columns.tolist()
         csv_writer.writerow(header)
 
-        for size_of in group_sizes:
+        for size_of in numbers_of_features:
             compute_variances_for_groups_of_size(features, outcomes, size_of, csv_writer)
 
 
@@ -118,18 +121,18 @@ def main() -> None:
         type=str, help="The name of the column that is the outcome/dependent variable", required=True,
     )
     sim_cli.add_argument(
-        "-sizes", "--sizes_of_groups",
-        nargs='*', type=int, help="The sizes of the combinations that we will get for features", required=True,
+        "-numf", "--numbers_of_features",
+        nargs='*', type=int, help="The sizes of the combinations that we will get for features. The sizes of features ew do nChoose for.", required=True,
     )
     
     args = sim_cli.parse_args()
-    assert(args.sizes_of_groups), "Must have some sizes to run on!"
+    assert(args.numbers_of_features), "Must have some sizes to run on!"
 
     return irreducible_error_entrypoint(
         args.data_filepath,
         args.results_filepath,
         args.outcome_colname,
-        args.sizes_of_groups,
+        args.numbers_of_features,
     )
     
 
