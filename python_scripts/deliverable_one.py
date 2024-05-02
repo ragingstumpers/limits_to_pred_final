@@ -10,7 +10,13 @@ from typing import Any, Generator
 ########## GLOBALS ##########
 
 HEADER = ['NUM_FEATURES', 'CONCAT_FEATURES', 'IRREDUCIBLE_ERROR']
-
+NULL_STRINGS = {
+    "nan", "NAN", "NaN", "null", "Null", "NULL", "n/a",
+}
+COL_CUSTOM_HANDLERS = {
+    'age': lambda x: x.replace("90 (90+ in 1980 and 1990)", 100).replace("less than 1 year old", 0).astype('float64'),
+    'uhrswork': lambda x: x.replace("99 (topcode)", 100).astype('float64')
+}
 
 ########## NORMALIZATION ##########
 
@@ -18,12 +24,16 @@ def _median_norm(col: pd.DataFrame) -> pd.DataFrame:
     median = col.median()
     return (col >= median).astype(int)
 
-def normalize__inplace(mtx: pd.DataFrame) -> pd.DataFrame:
-    # only do median normalization for numeric values
-    numeric_cols = mtx.select_dtypes(include="number")
+def normalize__inplace(features: pd.DataFrame) -> pd.DataFrame:
+    # handle some specific cases
+    for colname, handler in COL_CUSTOM_HANDLERS.items():
+        features[colname] = handler(features[colname])
 
+    # only do median normalization for numeric values
+    numeric_cols = features.select_dtypes(include="number")
     for col_name, col in numeric_cols.items():
-        mtx[col_name] = _median_norm(col)
+        features[col_name] = _median_norm(col)
+    return features
        
 
 ########## VARIANCE HELPERS ##########
@@ -31,7 +41,6 @@ def normalize__inplace(mtx: pd.DataFrame) -> pd.DataFrame:
 def _combinations_gen(features: pd.DataFrame, size_of: int) -> Generator:
     # groups of the column names
     for i, comb_colnames in enumerate(combinations(features.columns.tolist(), size_of)):
-        # print(i)
         # actually get the group of columns
         comb = features[list(comb_colnames)]
         yield comb
@@ -86,12 +95,12 @@ def irreducible_error_entrypoint(
     numbers_of_features: list[int]
 ) -> None:
     # need to consider if this needs more cleaning
-    data = pd.read_csv(data_filepath, header=0)
+    data = pd.read_csv(data_filepath, header=0, na_filter=True, na_values=NULL_STRINGS)
 
     # do I drop the outcome before or after min max? here I am doing it before, but ask
     outcomes = data[outcome_colname]
     features = data.drop(outcome_colname, axis=1)
-    data = normalize__inplace(data)
+    features = normalize__inplace(features)
 
     with open(results_filepath, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
