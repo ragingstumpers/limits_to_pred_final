@@ -1,10 +1,9 @@
 from __future__ import division
 import argparse
-from collections import defaultdict
 import csv
 from itertools import combinations
+import numpy as np
 import pandas as pd
-import random
 from typing import Any, Generator
 
 ########## GLOBALS ##########
@@ -48,10 +47,10 @@ def _combinations_gen(features: pd.DataFrame, size_of: int) -> Generator:
 def _compute_irreducible__mutates(features: pd.DataFrame, outcomes: pd.DataFrame) -> list[pd.DataFrame]:
     group_by_colnames = features.columns.tolist()
     num_rows = features.shape[0]
-    features.insert(len(group_by_colnames), "outcome", outcomes)
+    features.insert(len(group_by_colnames), "outcomes", outcomes)
     agg_by_group = features.groupby(group_by_colnames).agg(['count', 'var'])
-    variances_by_group = agg_by_group[('outcome', 'var')].fillna(0)
-    counts_by_group = agg_by_group[('outcome', 'count')]
+    variances_by_group = agg_by_group[('outcomes', 'var')].fillna(0)
+    counts_by_group = agg_by_group[('outcomes', 'count')]
     return ((variances_by_group * counts_by_group) / num_rows).sum()
 
 
@@ -92,12 +91,15 @@ def irreducible_error_entrypoint(
     data_filepath: str,
     results_filepath: str,
     outcome_colname: str,
-    numbers_of_features: list[int]
+    numbers_of_features: list[int],
+    log_outcomes: bool,
 ) -> None:
     # need to consider if this needs more cleaning
     data = pd.read_csv(data_filepath, header=0, na_filter=True, na_values=NULL_STRINGS)
 
-    # do I drop the outcome before or after min max? here I am doing it before, but ask
+    if log_outcomes:
+        data[outcome_colname] = np.log(data[outcome_colname] + 1)
+
     outcomes = data[outcome_colname]
     features = data.drop(outcome_colname, axis=1)
     features = normalize__inplace(features)
@@ -131,6 +133,10 @@ def main() -> None:
         "-numf", "--numbers_of_features",
         nargs='*', type=int, help="The sizes of the combinations that we will get for features. The sizes of features ew do nChoose for.", required=True,
     )
+    sim_cli.add_argument(
+        "-log", "--log_outcomes",
+        type=bool, default=False, help="Should the outcome column have +1 then log applied to it.",
+    )
     
     args = sim_cli.parse_args()
     assert(args.numbers_of_features), "Must have some sizes to run on!"
@@ -140,6 +146,7 @@ def main() -> None:
         args.results_filepath,
         args.outcome_colname,
         args.numbers_of_features,
+        args.log_outcomes,
     )
     
 
