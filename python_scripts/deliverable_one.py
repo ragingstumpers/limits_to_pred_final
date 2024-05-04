@@ -68,7 +68,7 @@ def _compute_irreducible__mutates(features: pd.DataFrame, outcomes: pd.DataFrame
     group_by_colnames = features.columns.tolist()
     num_rows = features.shape[0]
     features.insert(len(group_by_colnames), "outcomes", outcomes)
-    agg_by_group = features.groupby(group_by_colnames).agg(['count', 'var'])
+    agg_by_group = features.groupby(group_by_colnames, observed=False).agg(['count', 'var'])
     variances_by_group = agg_by_group[('outcomes', 'var')].fillna(0)
     counts_by_group = agg_by_group[('outcomes', 'count')]
     return ((variances_by_group * counts_by_group) / num_rows).sum()
