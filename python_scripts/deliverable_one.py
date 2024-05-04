@@ -31,10 +31,10 @@ def _median_norm(col: pd.DataFrame) -> pd.DataFrame:
     return (col >= median).astype(int)
 
 def _quartiles_norm(col: pd.DataFrame) -> pd.DataFrame:
-    return pd.qcut(col, 4)
+    return pd.qcut(col, 4, duplicates='drop')
 
 def _deciles_norm(col: pd.DataFrame) -> pd.DataFrame:
-    return pd.qcut(col, 10)
+    return pd.qcut(col, 10, duplicates='drop')
 
 NORM_OPTONS_TO_FN = {
     NormalizeOptions.median: _median_norm,
