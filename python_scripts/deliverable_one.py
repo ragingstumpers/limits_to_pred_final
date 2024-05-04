@@ -1,6 +1,7 @@
 from __future__ import division
 import argparse
 import csv
+from enum import Enum
 from itertools import combinations
 import numpy as np
 import pandas as pd
@@ -17,21 +18,40 @@ COL_CUSTOM_HANDLERS = {
     'uhrswork': lambda x: x.replace("99 (topcode)", 100).astype('float64')
 }
 
+class NormalizeOptions(Enum):
+    median = 'median'
+    quartile = 'quartile'
+    decile = 'decile'
+
+
 ########## NORMALIZATION ##########
 
 def _median_norm(col: pd.DataFrame) -> pd.DataFrame:
     median = col.median()
     return (col >= median).astype(int)
 
-def normalize__inplace(features: pd.DataFrame) -> pd.DataFrame:
+def _quartiles_norm(col: pd.DataFrame) -> pd.DataFrame:
+    return pd.qcut(col, 4)
+
+def _deciles_norm(col: pd.DataFrame) -> pd.DataFrame:
+    return pd.qcut(col, 10)
+
+NORM_OPTONS_TO_FN = {
+    NormalizeOptions.median: _median_norm,
+    NormalizeOptions.quartile: _quartiles_norm,
+    NormalizeOptions.decile: _deciles_norm,
+}
+
+def normalize__inplace(features: pd.DataFrame, norm_option: NormalizeOptions) -> pd.DataFrame:
     # handle some specific cases
     for colname, handler in COL_CUSTOM_HANDLERS.items():
         features[colname] = handler(features[colname])
 
+    normalizer = NORM_OPTONS_TO_FN[norm_option]
     # only do median normalization for numeric values
     numeric_cols = features.select_dtypes(include="number")
     for col_name, col in numeric_cols.items():
-        features[col_name] = _median_norm(col)
+        features[col_name] = normalizer(col)
     return features
        
 
@@ -93,6 +113,7 @@ def irreducible_error_entrypoint(
     outcome_colname: str,
     numbers_of_features: list[int],
     log_outcomes: bool,
+    norm_option: NormalizeOptions,
 ) -> None:
     # need to consider if this needs more cleaning
     data = pd.read_csv(data_filepath, header=0, na_filter=True, na_values=NULL_STRINGS)
@@ -102,7 +123,7 @@ def irreducible_error_entrypoint(
 
     outcomes = data[outcome_colname]
     features = data.drop(outcome_colname, axis=1)
-    features = normalize__inplace(features)
+    features = normalize__inplace(features, norm_option)
 
     with open(results_filepath, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
@@ -137,6 +158,11 @@ def main() -> None:
         "-log", "--log_outcomes",
         type=bool, default=False, help="Should the outcome column have +1 then log applied to it.",
     )
+    sim_cli.add_argument(
+        "-norm", "--norm_option",
+        type=str, choices=[nopt.value for nopt in NormalizeOptions],
+        default=NormalizeOptions.median.value, help="What resolution to normalize the data.",
+    )
     
     args = sim_cli.parse_args()
     assert(args.numbers_of_features), "Must have some sizes to run on!"
@@ -147,6 +173,7 @@ def main() -> None:
         args.outcome_colname,
         args.numbers_of_features,
         args.log_outcomes,
+        NormalizeOptions(args.norm_option),
     )
     
 
