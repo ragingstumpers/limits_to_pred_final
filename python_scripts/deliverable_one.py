@@ -17,6 +17,10 @@ COL_CUSTOM_HANDLERS = {
     'age': lambda x: x.replace("90 (90+ in 1980 and 1990)", 100).replace("less than 1 year old", 0).astype('float64'),
     'uhrswork': lambda x: x.replace("99 (topcode)", 100).astype('float64')
 }
+NEED_HANDLERS = False
+CATEGORICAL_COLS = {
+   'metro', 'gq', 'sex', 'marst', 'educ', 'empstat', 'vetstat'
+}
 
 class NormalizeOptions(Enum):
     median = 'median'
@@ -44,14 +48,16 @@ NORM_OPTONS_TO_FN = {
 
 def normalize__inplace(features: pd.DataFrame, norm_option: NormalizeOptions) -> pd.DataFrame:
     # handle some specific cases
-    for colname, handler in COL_CUSTOM_HANDLERS.items():
-        features[colname] = handler(features[colname])
+    if NEED_HANDLERS:
+        for colname, handler in COL_CUSTOM_HANDLERS.items():
+            features[colname] = handler(features[colname])
 
     normalizer = NORM_OPTONS_TO_FN[norm_option]
     # only do median normalization for numeric values
     numeric_cols = features.select_dtypes(include="number")
     for col_name, col in numeric_cols.items():
-        features[col_name] = normalizer(col)
+        if col_name not in CATEGORICAL_COLS:
+            features[col_name] = normalizer(col)
     return features
        
 
@@ -117,6 +123,7 @@ def irreducible_error_entrypoint(
 ) -> None:
     # need to consider if this needs more cleaning
     data = pd.read_csv(data_filepath, header=0, na_filter=True, na_values=NULL_STRINGS)
+    assert(CATEGORICAL_COLS.issubset(data.columns.tolist())), "categorical cols not a subset of actual cols"
 
     if log_outcomes:
         data[outcome_colname] = np.log(data[outcome_colname] + 1)
